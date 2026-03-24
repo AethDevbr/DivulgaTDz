@@ -1,4 +1,4 @@
-
+import os
 import discord
 from discord.ext import commands
 import json
@@ -108,4 +108,4 @@ async def on_ready():
     await bot.tree.sync()
     print("Bot online")
 
-bot.run(config["token"])
+bot.run(os.getenv("DISCORD_TOKEN")) 
