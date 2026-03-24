@@ -1,0 +1,9 @@
+
+{
+    "token": "COLOQUE_TOKEN",
+    "pix": "SUA_CHAVE_PIX",
+    "ticket_category": "🛒 Compras",
+    "vip_role": "💎VIP",
+    "log_channel": "logs-compras",
+    "public_channel": "🛍️-compras-realizadas"
+}
