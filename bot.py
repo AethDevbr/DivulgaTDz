@@ -1,6 +1,6 @@
 """
 ========================================
-TDZ DIVULGAÇÕES - BOT COMPLETO
+TDZ DIVULGAÇÕES - BOT COMPLETO (ATUALIZADO)
 ========================================
 Bot de divulgação com sistema de vendas VIP
 Slash Commands | Python 3.11.9 | discord.py 2.5.2
@@ -56,10 +56,12 @@ CONFIG = {
     "CANAL_ARTES": "🖼️・ARTES-DIGITAIS",
     "CANAL_SERVICOS": "🛠️・SERVICOS-OFERTAS",
     "CANAL_FEEDBACK": "🌟-Feedback",
+    "CANAL_COMPRAS_REALIZADAS_ID": 1486065492538953888,  # NOVO - ID do canal de compras
     
     # Pagamento
     "PIX_CHAVE": "999049883",
     "EMOJI_PIX": "<:emoji_2:1486128219504513066>",
+    "EMOJI_CARRINHO": "<:emoji_3:1486164433679155402>",  # NOVO - Emoji carrinho
     
     # Preços
     "PRECOS": {
@@ -76,7 +78,8 @@ CONFIG = {
         "vip": "https://i.imgur.com/ryeKviZ.png",
         "shop": "https://i.imgur.com/ryeKviZ.png",
         "giveaway": "https://i.imgur.com/DbgjpnR.png",
-        "welcome": "https://i.imgur.com/DbgjpnR.png"
+        "welcome": "https://i.imgur.com/DbgjpnR.png",
+        "compra_realizada": "https://i.imgur.com/1oyHhIM.png"  # NOVO
     }
 }
 
@@ -158,16 +161,34 @@ def criar_embed(titulo: str, descricao: str, cor: discord.Color, imagem: str = N
     return embed
 
 def get_star_emoji(qtd: int) -> str:
+    # CORRIGIDO: Garante que qtd está entre 0 e 5
+    qtd = max(0, min(5, qtd))
     return "★" * qtd + "☆" * (5 - qtd)
 
 # ========================================
-# MODAL AVALIAÇÃO
+# MODAL AVALIAÇÃO (CORRIGIDO)
 # ========================================
 
 class AvaliacaoModal(ui.Modal, title="🌟 Avaliar Atendimento"):
-    staff = ui.TextInput(label="Staff Responsável", placeholder="Quem te atendeu?", required=True, max_length=100)
-    descricao = ui.TextInput(label="Como foi o atendimento?", placeholder="Sua experiência...", required=True, style=discord.TextStyle.paragraph, max_length=1000)
-    estrelas = ui.TextInput(label="Estrelas (0 a 5)", placeholder="0-5", required=True, max_length=1)
+    staff = ui.TextInput(
+        label="Staff Responsável", 
+        placeholder="Quem te atendeu?", 
+        required=True, 
+        max_length=100
+    )
+    descricao = ui.TextInput(
+        label="Como foi o atendimento?", 
+        placeholder="Sua experiência...", 
+        required=True, 
+        style=discord.TextStyle.paragraph, 
+        max_length=1000
+    )
+    estrelas = ui.TextInput(
+        label="Estrelas (1 a 5)", 
+        placeholder="Digite 1, 2, 3, 4 ou 5", 
+        required=True, 
+        max_length=1
+    )
     
     def __init__(self, user_id: int, user_name: str, user_avatar: str):
         super().__init__()
@@ -177,25 +198,66 @@ class AvaliacaoModal(ui.Modal, title="🌟 Avaliar Atendimento"):
     
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            estrelas_num = int(self.estrelas.value)
-            if estrelas_num < 0 or estrelas_num > 5:
-                await interaction.response.send_message("❌ Digite 0-5!", ephemeral=True)
+            # CORRIGIDO: Validação mais robusta
+            estrelas_str = self.estrelas.value.strip()
+            
+            if not estrelas_str.isdigit():
+                await interaction.response.send_message("❌ Digite apenas números de 1 a 5!", ephemeral=True)
                 return
             
-            canal = discord.utils.get(interaction.guild.channels, name=CONFIG["CANAL_FEEDBACK"])
-            if canal:
-                stars = get_star_emoji(estrelas_num)
-                embed = discord.Embed(title="🌟 Nova Avaliação", color=discord.Color.gold(), timestamp=datetime.datetime.now())
-                embed.add_field(name="👤 Usuário", value="`" + self.user_name + "`", inline=True)
-                embed.add_field(name="🛡️ Staff", value="`" + self.staff.value + "`", inline=True)
-                embed.add_field(name="📝 Descrição", value="```" + self.descricao.value + "```", inline=False)
-                embed.set_thumbnail(url=self.user_avatar)
-                embed.set_footer(text=stars + " (" + str(estrelas_num) + "/5)")
-                await canal.send(embed=embed)
+            estrelas_num = int(estrelas_str)
             
-            await interaction.response.send_message("✅ Obrigado!", ephemeral=True)
+            if estrelas_num < 1 or estrelas_num > 5:
+                await interaction.response.send_message("❌ Digite um número entre 1 e 5!", ephemeral=True)
+                return
+            
+            # Buscar canal de feedback
+            canal = discord.utils.get(interaction.guild.channels, name=CONFIG["CANAL_FEEDBACK"])
+            
+            if not canal:
+                await interaction.response.send_message("❌ Canal de feedback não encontrado!", ephemeral=True)
+                return
+            
+            # Criar embed de avaliação
+            stars = get_star_emoji(estrelas_num)
+            
+            embed = discord.Embed(
+                title="🌟 Nova Avaliação Recebida",
+                color=discord.Color.gold(),
+                timestamp=datetime.datetime.now()
+            )
+            
+            # CORRIGIDO: Usando ` em todos os campos conforme solicitado
+            embed.add_field(name="👤 Usuário", value=f"`{self.user_name}`", inline=True)
+            embed.add_field(name="🛡️ Staff", value=f"`{self.staff.value}`", inline=True)
+            embed.add_field(name="⭐ Nota", value=f"`{estrelas_num}/5`", inline=True)
+            embed.add_field(name="📝 Descrição", value=f"```{self.descricao.value}```", inline=False)
+            
+            if self.user_avatar:
+                embed.set_thumbnail(url=self.user_avatar)
+            
+            embed.set_footer(text=f"Avaliação #{len(db.dados['feedbacks']) + 1}")
+            
+            await canal.send(embed=embed)
+            
+            # Salvar no banco de dados
+            db.dados["feedbacks"].append({
+                "user_id": self.user_id,
+                "user_name": self.user_name,
+                "staff": self.staff.value,
+                "estrelas": estrelas_num,
+                "descricao": self.descricao.value,
+                "data": datetime.datetime.now().isoformat()
+            })
+            db.salvar()
+            
+            await interaction.response.send_message("✅ Obrigado pela sua avaliação!", ephemeral=True)
+            
         except ValueError:
-            await interaction.response.send_message("❌ Apenas números!", ephemeral=True)
+            await interaction.response.send_message("❌ Erro: Digite apenas números!", ephemeral=True)
+        except Exception as e:
+            print(f"Erro no modal: {e}")
+            await interaction.response.send_message(f"❌ Erro ao enviar avaliação: {str(e)}", ephemeral=True)
 
 class AvaliacaoView(ui.View):
     def __init__(self, user_id: int, user_name: str, user_avatar: str):
@@ -207,12 +269,12 @@ class AvaliacaoView(ui.View):
     @ui.button(label="🌟 Avaliar Atendimento", style=discord.ButtonStyle.green)
     async def avaliar(self, interaction: discord.Interaction, button: ui.Button):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ Apenas você!", ephemeral=True)
+            await interaction.response.send_message("❌ Apenas você pode avaliar!", ephemeral=True)
             return
         await interaction.response.send_modal(AvaliacaoModal(self.user_id, self.user_name, self.user_avatar))
 
 # ========================================
-# TICKET VIEW
+# TICKET VIEW (ATUALIZADO COM COMPRAS REALIZADAS)
 # ========================================
 
 class TicketView(ui.View):
@@ -227,29 +289,29 @@ class TicketView(ui.View):
     @ui.button(label="🙋 Assumir Ticket", style=discord.ButtonStyle.blurple)
     async def assumir(self, interaction: discord.Interaction, button: ui.Button):
         if self.staff_responsavel:
-            await interaction.response.send_message("❌ Já assumido por " + self.staff_responsavel + "!", ephemeral=True)
+            await interaction.response.send_message(f"❌ Já assumido por `{self.staff_responsavel}`!", ephemeral=True)
             return
         
         self.staff_responsavel = interaction.user.display_name
         
         embed = criar_embed(
-            "🛒 Ticket - " + self.produto,
-            "**Comprador:** <@" + str(self.user_id) + "> (`" + self.user_name + "`)" + chr(10) +
-            "**Produto:** " + self.produto + chr(10) +
-            "**Valor:** R$" + str(self.valor) + ",00" + chr(10) +
-            "**🛡️ Staff:** `" + self.staff_responsavel + "`" + chr(10) + chr(10) +
-            CONFIG['EMOJI_PIX'] + " **PIX:** `" + CONFIG['PIX_CHAVE'] + "`",
+            f"🛒 Ticket - {self.produto}",
+            f"**Comprador:** <@{self.user_id}> (`{self.user_name}`)" + chr(10) +
+            f"**Produto:** `{self.produto}`" + chr(10) +
+            f"**Valor:** `R${self.valor},00`" + chr(10) +
+            f"**🛡️ Staff:** `{self.staff_responsavel}`" + chr(10) + chr(10) +
+            f"{CONFIG['EMOJI_PIX']} **PIX:** `{CONFIG['PIX_CHAVE']}`",
             discord.Color.gold(),
             CONFIG["IMAGENS"]["vip"]
         )
         
         await interaction.message.edit(embed=embed, view=self)
-        await interaction.response.send_message("✅ Assumido!", ephemeral=True)
+        await interaction.response.send_message("✅ Ticket assumido!", ephemeral=True)
     
     @ui.button(label="✅ Confirmar Pagamento", style=discord.ButtonStyle.green)
     async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
         if interaction.user.id != CONFIG["DONO_ID"]:
-            await interaction.response.send_message("❌ Apenas <@1327679436128129159> pode confirmar!", ephemeral=True)
+            await interaction.response.send_message(f"❌ Apenas <@{CONFIG['DONO_ID']}> pode confirmar!", ephemeral=True)
             return
         
         member = interaction.guild.get_member(self.user_id)
@@ -265,27 +327,80 @@ class TicketView(ui.View):
                     await member.add_roles(cargo_vip)
                     cargo_adicionado = True
                 except Exception as e:
-                    print("Erro ao adicionar cargo: " + str(e))
+                    print(f"Erro ao adicionar cargo: {e}")
         
-        await interaction.response.send_message("✅ Confirmado! Entregando...", ephemeral=True)
+        await interaction.response.send_message("✅ Pagamento confirmado! Processando...", ephemeral=True)
         
-        # MENSAGEM NO TICKET
+        # Mensagem no ticket
         msg_cargo = ""
         if cargo_adicionado:
             msg_cargo = chr(10) + "🎉 **Seu cargo VIP foi ativado automaticamente!**"
         
         await interaction.channel.send(
-            "🎉 " + member.mention + " **Pagamento Confirmado!**" + chr(10) + chr(10) +
-            "**Produto:** " + self.produto + chr(10) +
-            "**Valor:** R$" + str(self.valor) + ",00" + chr(10) +
-            "**Status:** ✅ Aprovado" + msg_cargo + chr(10) + chr(10) +
+            f"🎉 {member.mention} **Pagamento Confirmado!**" + chr(10) + chr(10) +
+            f"**Produto:** `{self.produto}`" + chr(10) +
+            f"**Valor:** `R${self.valor},00`" + chr(10) +
+            f"**Status:** ✅ Aprovado" + msg_cargo + chr(10) + chr(10) +
             "Obrigado pela compra! 💜"
         )
         
-        # DM - CORRIGIDO (sem backslash, usando chr(10) para nova linha)
+        # ========================================
+        # NOVO: ENVIAR EMBED NO CANAL DE COMPRAS REALIZADAS
+        # ========================================
+        try:
+            canal_compras = bot.get_channel(CONFIG["CANAL_COMPRAS_REALIZADAS_ID"])
+            
+            if canal_compras:
+                # Criar embed de compra realizada
+                embed_compra = discord.Embed(
+                    title=f"{CONFIG['EMOJI_CARRINHO']} Compra Realizada",
+                    description=f"Uma nova compra foi aprovada!",
+                    color=discord.Color.green(),
+                    timestamp=datetime.datetime.now()
+                )
+                
+                # Campos com ` conforme solicitado
+                embed_compra.add_field(name="👤 Usuário", value=f"`{member.display_name}`", inline=True)
+                embed_compra.add_field(name="🆔 ID", value=f"`{member.id}`", inline=True)
+                embed_compra.add_field(name="📦 Produto", value=f"`{self.produto}`", inline=True)
+                embed_compra.add_field(name="💰 Valor", value=f"`R${self.valor},00`", inline=True)
+                embed_compra.add_field(name="📊 Quantidade", value="`1`", inline=True)  # Quantidade fixa em 1
+                embed_compra.add_field(name="🛡️ Atendente", value=f"`{self.staff_responsavel or 'N/A'}`", inline=True)
+                
+                # Avatar no canto (thumbnail)
+                if member.avatar:
+                    embed_compra.set_thumbnail(url=member.avatar.url)
+                else:
+                    embed_compra.set_thumbnail(url=member.default_avatar.url)
+                
+                # Imagem embaixo
+                embed_compra.set_image(url=CONFIG["IMAGENS"]["compra_realizada"])
+                
+                # Footer com #
+                embed_compra.set_footer(text=f"#{len(db.dados['vendas']) + 1}")
+                
+                await canal_compras.send(embed=embed_compra)
+                
+                # Salvar venda no banco de dados
+                db.dados["vendas"].append({
+                    "user_id": member.id,
+                    "user_name": member.display_name,
+                    "produto": self.produto,
+                    "valor": self.valor,
+                    "quantidade": 1,
+                    "staff": self.staff_responsavel,
+                    "data": datetime.datetime.now().isoformat()
+                })
+                db.salvar()
+                
+        except Exception as e:
+            print(f"Erro ao enviar para canal de compras: {e}")
+            await interaction.channel.send(f"⚠️ Erro ao registrar compra no canal: {e}")
+        
+        # DM para o comprador
         msg_vip = ""
         if cargo_adicionado:
-            msg_vip = "🎊 **Seu cargo VIP já está ativo!** Use `/divulgarvip` para divulgar com estilo!" + chr(10) + chr(10)
+            msg_vip = f"🎊 **Seu cargo VIP já está ativo!** Use `/divulgarvip` para divulgar com estilo!" + chr(10) + chr(10)
         
         try:
             data_atual = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -293,12 +408,12 @@ class TicketView(ui.View):
             
             embed_dm = criar_embed(
                 "🎉 Compra Finalizada - TDZ Divulgações",
-                "Olá **" + member.display_name + "**!" + chr(10) + chr(10) +
+                f"Olá **{member.display_name}**!" + chr(10) + chr(10) +
                 "✅ **Pagamento Confirmado**" + chr(10) + chr(10) +
-                "**📦 Produto:** " + self.produto + chr(10) +
-                "**💰 Valor:** R$" + str(self.valor) + ",00" + chr(10) +
-                "**🛡️ Atendente:** `" + staff_nome + "`" + chr(10) +
-                "**📅 Data:** " + data_atual + chr(10) + chr(10) +
+                f"**📦 Produto:** `{self.produto}`" + chr(10) +
+                f"**💰 Valor:** `R${self.valor},00`" + chr(10) +
+                f"**🛡️ Atendente:** `{staff_nome}`" + chr(10) +
+                f"**📅 Data:** `{data_atual}`" + chr(10) + chr(10) +
                 msg_vip +
                 "💜 Obrigado por comprar conosco!" + chr(10) +
                 "🌟 Avalie seu atendimento abaixo:",
@@ -309,8 +424,8 @@ class TicketView(ui.View):
             view_avaliacao = AvaliacaoView(self.user_id, self.user_name, member.avatar.url if member.avatar else None)
             await member.send(embed=embed_dm, view=view_avaliacao)
         except Exception as e:
-            print("Erro ao enviar DM: " + str(e))
-            await interaction.channel.send("⚠️ Não consegui enviar DM para " + member.mention + ".")
+            print(f"Erro ao enviar DM: {e}")
+            await interaction.channel.send(f"⚠️ Não consegui enviar DM para {member.mention}.")
         
         # Botão fechar
         view_final = ui.View(timeout=None)
@@ -320,7 +435,7 @@ class TicketView(ui.View):
             if interact.user.id != CONFIG["DONO_ID"]:
                 await interact.response.send_message("❌ Apenas o Dono!", ephemeral=True)
                 return
-            await interact.response.send_message("🔒 Fechando...")
+            await interact.response.send_message("🔒 Fechando ticket...")
             await asyncio.sleep(3)
             await interact.channel.delete()
         
@@ -334,7 +449,7 @@ class TicketView(ui.View):
             await interaction.response.send_message("❌ Sem permissão!", ephemeral=True)
             return
         
-        await interaction.response.send_message("❌ Cancelando...", ephemeral=True)
+        await interaction.response.send_message("❌ Cancelando ticket...", ephemeral=True)
         await asyncio.sleep(2)
         await interaction.channel.delete()
 
@@ -343,24 +458,24 @@ class ProdutoSelect(ui.Select):
         options = [
             discord.SelectOption(
                 label="⭐ Destacar Mensagem",
-                description="R$" + str(CONFIG['PRECOS']['destacar_mensagem']) + " - Destaque nas divulgações",
+                description=f"R${CONFIG['PRECOS']['destacar_mensagem']} - Destaque nas divulgações",
                 value="destacar_mensagem",
                 emoji="⭐"
             ),
             discord.SelectOption(
                 label="💎 VIP",
-                description="R$" + str(CONFIG['PRECOS']['vip']) + " - Acesso /divulgarvip + Prioridade",
+                description=f"R${CONFIG['PRECOS']['vip']} - Acesso /divulgarvip + Prioridade",
                 value="vip",
                 emoji="💎"
             ),
             discord.SelectOption(
                 label="🚀 Divulgação Global",
-                description="R$" + str(CONFIG['PRECOS']['divulgacao_global']) + " - Todos canais + Ping",
+                description=f"R${CONFIG['PRECOS']['divulgacao_global']} - Todos canais + Ping",
                 value="divulgacao_global",
                 emoji="🚀"
             )
         ]
-        super().__init__(placeholder="🛒 Selecione...", options=options)
+        super().__init__(placeholder="🛒 Selecione um produto...", options=options)
     
     async def callback(self, interaction: discord.Interaction):
         produtos = {
@@ -373,7 +488,7 @@ class ProdutoSelect(ui.Select):
         
         embed = criar_embed(
             "🛒 Produto Selecionado",
-            "**" + produto + "** - R$" + str(valor) + ",00" + chr(10) + chr(10) + "Clique em **Continuar**!",
+            f"**{produto}** - `R${valor},00`" + chr(10) + chr(10) + "Clique em **Continuar** para prosseguir!",
             discord.Color.blue(),
             CONFIG["IMAGENS"]["shop"]
         )
@@ -395,7 +510,7 @@ class ContinuarView(ui.View):
         if not categoria:
             categoria = await guild.create_category(CONFIG["CATEGORIA_TICKETS"])
         
-        canal_nome = "🛒・compra-" + interaction.user.name.lower().replace(" ", "-")[:100]
+        canal_nome = f"🛒・compra-{interaction.user.name.lower().replace(' ', '-')[:100]}"
         
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -410,21 +525,21 @@ class ContinuarView(ui.View):
         canal = await guild.create_text_channel(name=canal_nome, category=categoria, overwrites=overwrites)
         
         embed = criar_embed(
-            "🛒 Ticket - " + self.produto,
-            "**Comprador:** <@" + str(interaction.user.id) + "> (`" + interaction.user.display_name + "`)" + chr(10) +
-            "**Produto:** " + self.produto + chr(10) +
-            "**Valor:** R$" + str(self.valor) + ",00" + chr(10) +
+            f"🛒 Ticket - {self.produto}",
+            f"**Comprador:** <@{interaction.user.id}> (`{interaction.user.display_name}`)" + chr(10) +
+            f"**Produto:** `{self.produto}`" + chr(10) +
+            f"**Valor:** `R${self.valor},00`" + chr(10) +
             "**🛡️ Staff:** `Aguardando...`" + chr(10) + chr(10) +
-            CONFIG['EMOJI_PIX'] + " **PIX:** `" + CONFIG['PIX_CHAVE'] + "`",
+            f"{CONFIG['EMOJI_PIX']} **PIX:** `{CONFIG['PIX_CHAVE']}`",
             discord.Color.gold(),
             CONFIG["IMAGENS"]["vip"]
         )
         
         view = TicketView(interaction.user.id, self.produto, self.valor, interaction.user.display_name)
-        msg = await canal.send("🛒 " + interaction.user.mention + " bem-vindo!", embed=embed, view=view)
+        msg = await canal.send(f"🛒 {interaction.user.mention} bem-vindo ao seu ticket!", embed=embed, view=view)
         await msg.pin()
         
-        await interaction.response.send_message("✅ Ticket: " + canal.mention, ephemeral=True)
+        await interaction.response.send_message(f"✅ Ticket criado: {canal.mention}", ephemeral=True)
     
     @ui.button(label="Cancelar", style=discord.ButtonStyle.red, emoji="❌")
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
@@ -447,11 +562,11 @@ async def painel(interaction: discord.Interaction):
     
     embed = criar_embed(
         "🛒 TDZ SHOP",
-        "**Planos:**" + chr(10) + chr(10) +
-        "⭐ **Destacar Mensagem** - R$" + str(CONFIG['PRECOS']['destacar_mensagem']) + chr(10) +
-        "💎 **VIP** - R$" + str(CONFIG['PRECOS']['vip']) + " (Acesso /divulgarvip)" + chr(10) +
-        "🚀 **Divulgação Global** - R$" + str(CONFIG['PRECOS']['divulgacao_global']) + chr(10) + chr(10) +
-        "**👇 Selecione:**",
+        "**Planos Disponíveis:**" + chr(10) + chr(10) +
+        f"⭐ **Destacar Mensagem** - `R${CONFIG['PRECOS']['destacar_mensagem']},00`" + chr(10) +
+        f"💎 **VIP** - `R${CONFIG['PRECOS']['vip']},00` (Acesso /divulgarvip)" + chr(10) +
+        f"🚀 **Divulgação Global** - `R${CONFIG['PRECOS']['divulgacao_global']},00`" + chr(10) + chr(10) +
+        "**👇 Selecione um produto abaixo:**",
         discord.Color.purple(),
         CONFIG["IMAGENS"]["shop"]
     )
@@ -472,11 +587,11 @@ async def divulgar(
     )
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
     
-    msg = await canal.send(content="📢 " + interaction.user.mention + ":", embed=embed)
+    msg = await canal.send(content=f"📢 {interaction.user.mention}:", embed=embed)
     await msg.add_reaction("👍")
     await msg.add_reaction("👎")
     
-    await interaction.response.send_message("✅ Divulgado em " + canal.mention + "!", ephemeral=True)
+    await interaction.response.send_message(f"✅ Divulgado em {canal.mention}!", ephemeral=True)
 
 @bot.tree.command(name="divulgarvip", description="💎 Divulgação VIP colorida")
 @app_commands.describe(texto="Texto", cor="Cor do embed")
@@ -491,7 +606,7 @@ async def divulgar(
 async def divulgarvip(interaction: discord.Interaction, texto: str, cor: app_commands.Choice[str]):
     if not is_vip(interaction.user):
         await interaction.response.send_message(
-            "❌ Você precisa do cargo **" + CONFIG['CARGO_VIP'] + "**!" + chr(10) +
+            f"❌ Você precisa do cargo **{CONFIG['CARGO_VIP']}**!" + chr(10) +
             "Compre no `/painel`!", 
             ephemeral=True
         )
@@ -521,22 +636,22 @@ async def divulgarvip(interaction: discord.Interaction, texto: str, cor: app_com
     for nome in canais:
         canal = discord.utils.get(interaction.guild.channels, name=nome)
         if canal:
-            await canal.send(content="💎 " + interaction.user.mention + ":", embed=embed)
+            await canal.send(content=f"💎 {interaction.user.mention}:", embed=embed)
             enviados += 1
     
-    await interaction.response.send_message("✅ VIP enviado em " + str(enviados) + " canais!", ephemeral=True)
+    await interaction.response.send_message(f"✅ VIP enviado em {enviados} canais!", ephemeral=True)
 
 @bot.tree.command(name="anunciar", description="📢 Anúncio staff")
 @app_commands.describe(canal="Canal", titulo="Título", mensagem="Texto")
 @app_commands.checks.has_permissions(manage_messages=True)
 async def anunciar(interaction: discord.Interaction, canal: discord.TextChannel, titulo: str, mensagem: str):
     try:
-        embed = criar_embed("📢 " + titulo, mensagem, discord.Color.blue(), CONFIG["IMAGENS"]["anuncio"])
+        embed = criar_embed(f"📢 {titulo}", mensagem, discord.Color.blue(), CONFIG["IMAGENS"]["anuncio"])
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
         await canal.send(embed=embed)
-        await interaction.response.send_message("✅ Enviado em " + canal.mention + "!", ephemeral=True)
+        await interaction.response.send_message(f"✅ Enviado em {canal.mention}!", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message("❌ Erro: " + str(e), ephemeral=True)
+        await interaction.response.send_message(f"❌ Erro: {e}", ephemeral=True)
 
 @bot.tree.command(name="regras", description="📕 Regras")
 async def regras(interaction: discord.Interaction):
@@ -574,13 +689,13 @@ async def infos(interaction: discord.Interaction):
     
     embed.add_field(
         name="👑 Dono",
-        value="**@slknumcompensa0743**" + chr(10) + "<@" + str(CONFIG['DONO_ID']) + ">",
+        value=f"**@slknumcompensa0743**" + chr(10) + f"<@{CONFIG['DONO_ID']}>",
         inline=False
     )
     
     embed.add_field(
         name="📊 Estatísticas",
-        value="**Membros:** " + str(guild.member_count) + chr(10) + "**Criado em:** " + guild.created_at.strftime('%d/%m/%Y'),
+        value=f"**Membros:** `{guild.member_count}`" + chr(10) + f"**Criado em:** `{guild.created_at.strftime('%d/%m/%Y')}`",
         inline=True
     )
     
@@ -592,9 +707,9 @@ async def infos(interaction: discord.Interaction):
     
     embed.add_field(
         name="💎 Planos VIP",
-        value="⭐ **Destacar Mensagem** - R$" + str(CONFIG['PRECOS']['destacar_mensagem']) + ",00" + chr(10) +
-              "💎 **VIP** - R$" + str(CONFIG['PRECOS']['vip']) + ",00" + chr(10) +
-              "🚀 **Divulgação Global** - R$" + str(CONFIG['PRECOS']['divulgacao_global']) + ",00",
+        value=f"⭐ **Destacar Mensagem** - `R${CONFIG['PRECOS']['destacar_mensagem']},00`" + chr(10) +
+              f"💎 **VIP** - `R${CONFIG['PRECOS']['vip']},00`" + chr(10) +
+              f"🚀 **Divulgação Global** - `R${CONFIG['PRECOS']['divulgacao_global']},00`",
         inline=False
     )
     
@@ -606,7 +721,7 @@ async def infos(interaction: discord.Interaction):
     
     embed.add_field(
         name="💳 Pagamento",
-        value=CONFIG['EMOJI_PIX'] + " **PIX:** `" + CONFIG['PIX_CHAVE'] + "`",
+        value=f"{CONFIG['EMOJI_PIX']} **PIX:** `{CONFIG['PIX_CHAVE']}`",
         inline=True
     )
     
@@ -635,7 +750,7 @@ async def say(interaction: discord.Interaction, mensagem: str, canal: Optional[d
 async def sorteio(interaction: discord.Interaction, premio: str, duracao: int, vencedores: int = 1):
     embed = criar_embed(
         "🎉 SORTEIO!",
-        "**Prêmio:** " + premio + chr(10) + "**Duração:** " + str(duracao) + "min" + chr(10) + "**Vencedores:** " + str(vencedores) + chr(10) + chr(10) + "Reaja com 🎉!",
+        f"**Prêmio:** `{premio}`" + chr(10) + f"**Duração:** `{duracao}min`" + chr(10) + f"**Vencedores:** `{vencedores}`" + chr(10) + chr(10) + "Reaja com 🎉!",
         discord.Color.gold(),
         CONFIG["IMAGENS"]["giveaway"]
     )
@@ -653,7 +768,7 @@ async def sorteio(interaction: discord.Interaction, premio: str, duracao: int, v
         if len(users) >= vencedores:
             ganhadores = random.sample(users, min(vencedores, len(users)))
             mencoes = ", ".join([g.mention for g in ganhadores])
-            await interaction.channel.send("🎉 " + mencoes + " ganhou: **" + premio + "**!")
+            await interaction.channel.send(f"🎉 {mencoes} ganhou: **{premio}**!")
 
 @bot.tree.command(name="fechar_ticket", description="🔒 Fecha ticket")
 @app_commands.checks.has_permissions(manage_channels=True)
@@ -673,10 +788,10 @@ async def perfil(interaction: discord.Interaction, membro: Optional[discord.Memb
     vip_status = "💎 Sim" if is_vip(alvo) else "❌ Não"
     
     embed = criar_embed(
-        "👤 Perfil de " + alvo.display_name,
-        "**📢 Divulgações:** " + str(stats.get('divulgacoes', 0)) + chr(10) +
-        "**💎 VIP:** " + vip_status + chr(10) +
-        "**📅 Entrou:** " + (alvo.joined_at.strftime('%d/%m/%Y') if alvo.joined_at else 'N/A'),
+        f"👤 Perfil de {alvo.display_name}",
+        f"**📢 Divulgações:** `{stats.get('divulgacoes', 0)}`" + chr(10) +
+        f"**💎 VIP:** `{vip_status}`" + chr(10) +
+        f"**📅 Entrou:** `{(alvo.joined_at.strftime('%d/%m/%Y') if alvo.joined_at else 'N/A')}`",
         discord.Color.purple(),
         thumbnail=alvo.avatar.url if alvo.avatar else None
     )
@@ -684,7 +799,7 @@ async def perfil(interaction: discord.Interaction, membro: Optional[discord.Memb
 
 @bot.tree.command(name="ping", description="🏓 Ping")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message("🏓 Pong! `" + str(round(bot.latency * 1000)) + "ms`")
+    await interaction.response.send_message(f"🏓 Pong! `{round(bot.latency * 1000)}ms`")
 
 @bot.tree.command(name="ajuda", description="❓ Ajuda")
 async def ajuda(interaction: discord.Interaction):
@@ -719,7 +834,7 @@ async def on_member_remove(member):
         return
     canal = discord.utils.get(member.guild.channels, name=CONFIG["CANAL_SAIDA"])
     if canal:
-        embed = criar_embed("👋 Saída", member.display_name + " saiu." + chr(10) + "**Membros:** " + str(member.guild.member_count), discord.Color.red())
+        embed = criar_embed("👋 Saída", f"{member.display_name} saiu." + chr(10) + f"**Membros:** `{member.guild.member_count}`", discord.Color.red())
         await canal.send(embed=embed)
 
 # ========================================
