@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Logs
+*.log
+
+# Banco de dados local
+tdz_database.json
+*.json
+!requirements.txt
+!runtime.txt
+
+# Sinais temporários
+sinal_*.json
+anuncios_pendentes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
